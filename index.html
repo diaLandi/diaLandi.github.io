@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>TRAILMATE Pack Builder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=ADLaM+Display&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; background: #080808; overflow: hidden; }
+  body { font-family: 'ADLaM Display', Georgia, serif; color: #eee; }
+  #app { width: 100%; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+  ::-webkit-scrollbar { width: 3px; }
+  ::-webkit-scrollbar-thumb { background: #242424; border-radius: 2px; }
+
+  .sans { font-family: system-ui, -apple-system, sans-serif; }
+
+  /* Transitions */
+  .hl { transition: transform 0.16s, border-color 0.16s, background 0.16s; cursor: pointer; }
+  .hl:hover { transform: translateY(-2px); }
+  .cr { transition: background 0.14s; cursor: pointer; }
+  .cr:hover { background: rgba(255,255,255,0.025) !important; }
+  .oc { transition: border-color 0.13s, background 0.13s, opacity 0.13s; cursor: pointer; user-select: none; }
+  .oc:hover:not(.dim) { border-color: #c8a060 !important; }
+  .dim { opacity: 0.32; cursor: not-allowed; }
+  .gb { transition: filter 0.16s, transform 0.16s; cursor: pointer; border: none; font-family: 'ADLaM Display', serif; }
+  .gb:hover { filter: brightness(1.12); transform: translateY(-1px); }
+  .gh { transition: border-color 0.14s, color 0.14s; cursor: pointer; background: none; font-family: system-ui, sans-serif; }
+  .gh:hover { border-color: #3e3e3e !important; color: #bbb !important; }
+  .fi { animation: fi 0.32s ease both; }
+  @keyframes fi { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+
+  #header { padding: 16px 24px; border-bottom: 1px solid #141414; flex-shrink: 0; }
+  #stepbar { padding: 10px 24px; border-bottom: 1px solid #111; flex-shrink: 0; overflow-x: auto; }
+  .step-item { display: flex; align-items: center; }
+  .step-btn { display: flex; align-items: center; gap: 7px; padding: 5px 12px; border-radius: 7px; white-space: nowrap; border: 1px solid transparent; transition: all 0.14s; cursor: pointer; }
+  .step-btn.active { background: rgba(180,140,80,0.08); border-color: rgba(180,140,80,0.25); }
+  .step-btn.locked { opacity: 0.25; cursor: default; }
+  .step-dot { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; font-family: sans-serif; flex-shrink: 0; }
+  .step-sep { width: 20px; height: 1px; background: #161616; flex-shrink: 0; }
+  #step-status { margin-left: auto; padding-left: 20px; display: flex; gap: 12px; align-items: center; }
+
+  /* Content scroll area */
+  #content { flex: 1; overflow-y: auto; padding: 28px 24px 56px; }
+  #content-inner { max-width: 1100px; margin: 0 auto; width: 100%; }
+  .bar-inner { max-width: 1100px; margin: 0 auto; width: 100%; display: flex; align-items: center; }
+
+  /* Grids */
+  .grid-auto { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+  .grid-color { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+  .grid-opts  { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 7px; }
+  .grid-summary { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; align-items: start; }
+  @media (max-width: 700px) { .grid-summary { grid-template-columns: 1fr; } }
+
+  /* Camo swatch */
+  .camo { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Crect width='60' height='60' fill='%232d3a1e'/%3E%3Cellipse cx='10' cy='12' rx='14' ry='9' fill='%233d5227' opacity='.9'/%3E%3Cellipse cx='45' cy='8' rx='10' ry='7' fill='%23546b32' opacity='.8'/%3E%3Cellipse cx='30' cy='30' rx='16' ry='10' fill='%23222e14' opacity='.7'/%3E%3Cellipse cx='5' cy='45' rx='12' ry='8' fill='%23546b32' opacity='.8'/%3E%3Cellipse cx='52' cy='40' rx='13' ry='9' fill='%233d5227' opacity='.85'/%3E%3Cellipse cx='28' cy='54' rx='10' ry='7' fill='%23222e14' opacity='.7'/%3E%3C/svg%3E"); background-size: 60px 60px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="header">
+    <div class="bar-inner">
+      <span style="font-size:26px;letter-spacing:0.06em;color:#fff;">TRAILMATE</span>
+      <span class="sans" style="font-size:11px;color:#333;letter-spacing:0.14em;text-transform:uppercase;margin-left:12px;">Pack Builder</span>
+    </div>
+  </div>
+  <div id="stepbar"><div class="bar-inner" id="stepbar-inner"></div></div>
+  <div id="content"></div>
+</div>
+
+<script>
+const GOLD='#c8a060', GOLD_BG='rgba(180,140,80,0.08)', GOLD_BORDER='rgba(180,140,80,0.25)';
+const fmt = n => n.toFixed(2).replace('.',',');
+
+const BASE_COMPS = [
+  { id:'main', label:'Main Compartment', icon:'🎒', desc:'Large main section', vol:'18L', max:3,
+    groups:{laptop:['laptop17','laptop15']},
+    opts:[
+      {id:'laptop17', label:'Laptop Sleeve 17"', icon:'💻', group:'laptop', hint:'Exclusive — one size only', extra:19.90},
+      {id:'laptop15', label:'Laptop Sleeve 15"', icon:'💻', group:'laptop', hint:'Exclusive — one size only', extra:14.90},
+      {id:'tablet',   label:'Tablet Organizer',  icon:'📱', extra:9.90},
+      {id:'hydration',label:'Hydration Sleeve',  icon:'💧'},
+      {id:'clothes',  label:'Clothing Organizer',icon:'👕'},
+      {id:'shoebag',  label:'Shoe Compartment',  icon:'👟', extra:9.90},
+    ]},
+  { id:'front', label:'Front Pocket', icon:'📦', desc:'Quick-access front', vol:'8L', max:3, groups:{},
+    opts:[
+      {id:'organizer', label:'EDC Organizer',         icon:'🗂️', extra:14.90},
+      {id:'cables',    label:'Cable Management',       icon:'🔌'},
+      {id:'keys',      label:'Key Holder',              icon:'🔑'},
+      {id:'passport',  label:'Passport Safe',           icon:'🛂', extra:9.90},
+      {id:'sunglass',  label:'Padded Glasses Pocket',  icon:'🕶️', extra:9.90},
+    ]},
+  { id:'top', label:'Top Pocket', icon:'⬆️', desc:'Quick-access top', vol:'3L', max:2, groups:{},
+    opts:[
+      {id:'quickzip',  label:'Quick-Access Zipper', icon:'⚡'},
+      {id:'rain',      label:'Rain Cover',          icon:'🌧️', extra:19.90},
+      {id:'firstaid',  label:'First Aid Kit',       icon:'🏥', extra:14.90},
+      {id:'powerbank', label:'Power Bank Mount',    icon:'🔋', extra:9.90},
+    ]},
+  { id:'sides', label:'Side Pockets', icon:'↔️', desc:'Both sides', vol:'1.5L each', max:2, groups:{},
+    opts:[
+      {id:'bottle',   label:'Elastic Bottle Holder',  icon:'🚰'},
+      {id:'umbrella', label:'Umbrella Holder',         icon:'☂️'},
+      {id:'tripod',   label:'Tripod Mount',            icon:'📷', extra:9.90},
+      {id:'hidden',   label:'Hidden Security Pocket',  icon:'🔒', extra:14.90},
+    ]},
+  { id:'back', label:'Back Panel', icon:'🏔️', desc:'Ergonomic back', vol:'—', max:2, groups:{},
+    opts:[
+      {id:'airflow', label:'AirFlow Channels',       icon:'🌬️'},
+      {id:'lumbar',  label:'Lumbar Support',         icon:'🦴', extra:19.90},
+      {id:'hipbelt', label:'Removable Hip Belt',     icon:'⚙️', extra:24.90},
+      {id:'stealth', label:'Anti-Theft Back Zipper', icon:'🛡️', extra:14.90},
+    ]},
+  { id:'straps', label:'Shoulder Straps', icon:'🎽', desc:'Carry system', vol:'—', max:2, groups:{},
+    opts:[
+      {id:'sternum',    label:'Sternum Strap',    icon:'➕'},
+      {id:'molle',      label:'MOLLE Webbing',    icon:'🔗', extra:14.90},
+      {id:'padded',     label:'Extra Padding',    icon:'🛋️', extra:9.90},
+      {id:'reflective', label:'Reflective Strips',icon:'✨'},
+    ]},
+];
+
+const COLORS=[
+  {id:'black', label:'Stealth Black', sub:'Deep Black',       hex:'#0f0f0f', mid:'#252525', hi:'#383838'},
+  {id:'grey',  label:'Slate Grey',    sub:'Dark Grey',        hex:'#363b42', mid:'#505965', hi:'#6a7888'},
+  {id:'navy',  label:'Deep Navy',     sub:'Navy Blue',        hex:'#0e1d38', mid:'#163058', hi:'#1e448a'},
+  {id:'mil',   label:'Military Green',sub:'Camo Olive Green', hex:'#2d3a1e', mid:'#3d5227', hi:'#546b32', camo:true},
+];
+const STEPS=['Size','Color','Compartments','Summary'];
+
+let state = {
+  step: 0, size: null, color: COLORS[0],
+  sel: {}, openComp: null
+};
+
+function getComps() {
+  if (state.size === 42) {
+    return BASE_COMPS.map(c => {
+      if (c.id==='main')  return {...c, vol:'26L', max:4, opts:[...c.opts,{id:'sleeping',label:'Sleeping Bag Compression',icon:'🏕️'}]};
+      if (c.id==='front') return {...c, vol:'10L'};
+      if (c.id==='top')   return {...c, vol:'4L',  opts:[...c.opts,{id:'sunhat',label:'Sun Hat Clip',icon:'🧢'}]};
+      return c;
+    });
+  }
+  return BASE_COMPS;
+}
+
+function calcPrice() {
+  if (!state.size) return '—';
+  const base = state.size===32 ? 299.90 : 349.90;
+  const extras = getComps().reduce((sum,comp)=>{
+    const s=state.sel[comp.id]||[];
+    return sum+s.reduce((a,id)=>{ const o=comp.opts.find(x=>x.id===id); return a+(o?.extra||0); },0);
+  },0);
+  return fmt(base+extras);
+}
+
+function totalFeatures() {
+  return Object.values(state.sel).reduce((a,b)=>a+b.length,0);
+}
+
+function canAdd(comp, optId) {
+  const opt=comp.opts.find(o=>o.id===optId);
+  const cur=state.sel[comp.id]||[];
+  if(cur.includes(optId)) return true; // can toggle off
+  if(cur.length>=comp.max){
+    if(opt?.group && cur.some(id=>comp.groups[opt.group]?.includes(id))) return true;
+    return false;
+  }
+  return true;
+}
+
+function toggle(comp, optId) {
+  const opt=comp.opts.find(o=>o.id===optId);
+  const cur=[...(state.sel[comp.id]||[])];
+  if(cur.includes(optId)){
+    state.sel[comp.id]=cur.filter(x=>x!==optId);
+  } else {
+    if(cur.length>=comp.max){
+      if(opt?.group && cur.some(id=>comp.groups[opt.group]?.includes(id))){
+        state.sel[comp.id]=[...cur.filter(id=>!comp.groups[opt.group].includes(id)),optId];
+      }
+      return;
+    }
+    let next=[...cur];
+    if(opt?.group && comp.groups[opt.group]) next=next.filter(id=>!comp.groups[opt.group].includes(id));
+    state.sel[comp.id]=[...next,optId];
+  }
+  render();
+}
+
+function el(tag, attrs, ...children) {
+  const e=document.createElement(tag);
+  for(const[k,v] of Object.entries(attrs||{})){
+    if(k==='style') Object.assign(e.style, v);
+    else if(k==='class') e.className=v;
+    else if(k.startsWith('on')) e.addEventListener(k.slice(2).toLowerCase(), v);
+    else e.setAttribute(k, v);
+  }
+  for(const c of children.flat()){
+    if(c==null) continue;
+    e.appendChild(typeof c==='string'?document.createTextNode(c):c);
+  }
+  return e;
+}
+function div(attrs,...c){return el('div',attrs,...c);}
+function span(attrs,...c){return el('span',attrs,...c);}
+function btn(attrs,...c){return el('button',attrs,...c);}
+function p(attrs,...c){return el('p',attrs,...c);}
+function h1(attrs,...c){return el('h1',attrs,...c);}
+
+// ── STEP BAR ─────────────────────────────────────────────
+function renderStepBar() {
+  const bar=document.getElementById('stepbar-inner');
+  bar.innerHTML='';
+  STEPS.forEach((s,i)=>{
+    const done=i<state.step, active=i===state.step, locked=i>state.step;
+    const dotBg=done?GOLD:active?'rgba(180,140,80,0.12)':'#161616';
+    const dotBorder=done?'none':active?`1px solid ${GOLD}`:'1px solid #222';
+    const dotColor=done?'#080808':active?GOLD:'#3a3a3a';
+    const stepBtn=div({
+      class:`step-btn${active?' active':''}${locked?' locked':''}`,
+      onclick:()=>{ if(!locked){state.step=i;render();} }
+    },
+      div({class:'step-dot sans',style:{background:dotBg,border:dotBorder,color:dotColor}}, done?'✓':String(i+1)),
+      span({style:{fontSize:'13px',fontWeight:active?'600':'400',color:active?'#ddd':done?'#888':'#3a3a3a'}},s)
+    );
+    bar.appendChild(div({class:'step-item'},stepBtn));
+    if(i<STEPS.length-1) bar.appendChild(div({class:'step-sep'}));
+  });
+  if(state.size && state.step>0){
+    const tf=totalFeatures();
+    bar.appendChild(div({id:'step-status'},
+      span({class:'sans',style:{fontSize:'11px',color:'#383838',whiteSpace:'nowrap'}},
+        `${state.size}L · ${state.color.label}`+(tf>0?` · ${tf} add-ons`:'')),
+      span({style:{fontSize:'16px',color:'#555'}},`€ ${calcPrice()}`)
+    ));
+  }
+}
+
+// ── STEP 0: SIZE ─────────────────────────────────────────
+function renderSize() {
+  const sizes=[
+    {l:32,name:'Urban Traveler',desc:'Ideal for weekend trips and business travel. Fits in most airline overhead compartments.',tags:['✈️ Carry-on','⚖️ 1.2 kg'],bp:'299,90'},
+    {l:42,name:'Expedition Pro', desc:'Built for multi-day tours and longer journeys. Extended carry system, maximum storage.',tags:['🏔️ Expedition-ready','⚖️ 1.5 kg'],bp:'349,90'},
+  ];
+  const grid=div({class:'grid-auto fi'});
+  sizes.forEach(({l,name,desc,tags,bp})=>{
+    const sel=state.size===l;
+    const card=div({
+      class:'hl',
+      style:{padding:'28px 26px',borderRadius:'14px',border:`1.5px solid ${sel?GOLD:'#181818'}`,background:sel?GOLD_BG:'#0d0d0d'},
+      onclick:()=>{ state.size=l; state.step=1; render(); }
+    },
+      div({style:{fontSize:'60px',color:GOLD,lineHeight:'1',marginBottom:'4px'}}, `${l}L`),
+      div({style:{fontSize:'19px',fontWeight:'700',color:'#999',marginBottom:'10px'}}, `from ${bp} €`),
+      div({style:{fontSize:'15px',fontWeight:'600',color:'#ccc',marginBottom:'8px'}}, name),
+      p({class:'sans',style:{fontSize:'13px',color:'#4e4e4e',lineHeight:'1.65',marginBottom:'18px'}}, desc),
+      div({style:{display:'flex',flexWrap:'wrap',gap:'6px'}},
+        ...[...tags,'🌧️ IPX6'].map(t=>span({class:'sans',style:{fontSize:'11px',padding:'3px 10px',borderRadius:'20px',background:'#131313',border:'1px solid #1e1e1e',color:'#666'}},t))
+      )
+    );
+    grid.appendChild(card);
+  });
+  return div({},
+    p({class:'sans',style:{fontSize:'11px',letterSpacing:'0.16em',color:GOLD,textTransform:'uppercase',marginBottom:'10px'}},'Step 1 · Choose Your Size'),
+    h1({style:{fontSize:'36px',letterSpacing:'0.03em',marginBottom:'8px',lineHeight:'1.1'}},'What capacity do you need?'),
+    p({class:'sans',style:{fontSize:'14px',color:'#4a4a4a',marginBottom:'26px',lineHeight:'1.6'}},'Both variants are fully waterproof (IPX6) and carry-on compatible with most airlines.'),
+    grid
+  );
+}
+
+// ── STEP 1: COLOR ─────────────────────────────────────────
+function renderColor() {
+  const grid=div({class:'grid-color fi',style:{marginBottom:'24px'}});
+  COLORS.forEach(c=>{
+    const sel=state.color.id===c.id;
+    const swatchClass=c.camo?'camo':'';
+    const swatchStyle={width:'52px',height:'52px',borderRadius:'10px',flexShrink:'0',border:`1.5px solid ${sel?'rgba(180,140,80,0.3)':'rgba(255,255,255,0.05)'}`};
+    if(!c.camo) Object.assign(swatchStyle,{background:`linear-gradient(140deg,${c.hex} 0%,${c.mid} 55%,${c.hi} 100%)`});
+    const card=div({
+      class:'hl',
+      style:{padding:'18px 20px',borderRadius:'12px',border:`1.5px solid ${sel?GOLD:'#181818'}`,background:sel?GOLD_BG:'#0d0d0d',display:'flex',alignItems:'center',gap:'16px'},
+      onclick:()=>{ state.color=c; render(); }
+    },
+      div({class:swatchClass,style:swatchStyle}),
+      div({style:{flex:'1',minWidth:'0'}},
+        div({style:{fontSize:'15px',fontWeight:'600',color:'#d0d0d0',marginBottom:'2px'}}, c.label),
+        span({class:'sans',style:{fontSize:'12px',color:'#4a4a4a'}}, c.sub),
+        c.camo?p({class:'sans',style:{fontSize:'10px',color:'#6a8a3a',marginTop:'3px'}},'▲ Military camo pattern'):null
+      ),
+      div({class:'sans',style:{width:'20px',height:'20px',borderRadius:'50%',flexShrink:'0',border:`1.5px solid ${sel?GOLD:'#222'}`,background:sel?GOLD:'transparent',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'9px',color:'#080808',fontWeight:'900'}}, sel?'✓':'')
+    );
+    grid.appendChild(card);
+  });
+  return div({class:'fi'},
+    p({class:'sans',style:{fontSize:'11px',letterSpacing:'0.16em',color:GOLD,textTransform:'uppercase',marginBottom:'10px'}},'Step 2 · Choose Your Color'),
+    h1({style:{fontSize:'36px',letterSpacing:'0.03em',marginBottom:'8px',lineHeight:'1.1'}},'Pick your colorway'),
+    p({class:'sans',style:{fontSize:'14px',color:'#4a4a4a',marginBottom:'24px',lineHeight:'1.6'}},'YKK zippers, straps and stitching are color-matched throughout.'),
+    grid,
+    div({style:{display:'flex',gap:'12px'}},
+      btn({class:'gh',style:{padding:'13px 22px',borderRadius:'10px',border:'1px solid #1c1c1c',color:'#555',fontSize:'14px'},onclick:()=>{state.step=0;render();}},'← Back'),
+      btn({class:'gb',style:{flex:'1',padding:'13px 22px',borderRadius:'10px',background:'linear-gradient(135deg,#b48c50,#d4a96a)',color:'#080808',fontSize:'15px',fontWeight:'700'},onclick:()=>{state.step=2;render();}},'Configure Compartments →')
+    )
+  );
+}
+
+// ── STEP 2: COMPARTMENTS ──────────────────────────────────
+function renderCompartments() {
+  const comps=getComps();
+  const list=div({style:{display:'flex',flexDirection:'column',gap:'7px',marginBottom:'24px'}});
+  comps.forEach(comp=>{
+    const open=state.openComp===comp.id;
+    const sel=state.sel[comp.id]||[];
+    const atMax=sel.length>=comp.max;
+    const wrap=div({style:{borderRadius:'12px',border:`1px solid ${open?'#242424':'#181818'}`,background:'#0d0d0d',overflow:'hidden'}});
+    const rowBg=open?'#101010':'transparent';
+    const row=div({class:'cr',style:{padding:'15px 20px',display:'flex',alignItems:'center',gap:'14px',background:rowBg},
+      onclick:()=>{ state.openComp=open?null:comp.id; render(); }},
+      span({style:{fontSize:'20px',lineHeight:'1',flexShrink:'0'}},comp.icon),
+      div({style:{flex:'1',minWidth:'0'}},
+        div({style:{fontSize:'14px',fontWeight:'600',color:'#c8c8c8'}},comp.label),
+        span({class:'sans',style:{fontSize:'11px',color:'#404040',marginTop:'2px',display:'block'}},`${comp.desc} · ${comp.vol}`)
+      ),
+      div({style:{display:'flex',alignItems:'center',gap:'8px',flexShrink:'0'}},
+        span({class:'sans',style:{fontSize:'11px',padding:'2px 9px',borderRadius:'20px',whiteSpace:'nowrap',background:atMax?'rgba(180,140,80,0.12)':'#111',color:atMax?GOLD:'#383838',border:`1px solid ${atMax?GOLD_BORDER:'#1c1c1c'}`}},`${sel.length}/${comp.max}`),
+        span({style:{fontSize:'13px',color:'#303030',display:'inline-block',transform:open?'rotate(180deg)':'none',transition:'transform 0.18s'}},'▾')
+      )
+    );
+    wrap.appendChild(row);
+    if(open){
+      const optWrap=div({style:{padding:'12px 16px 14px',borderTop:'1px solid #181818'}});
+      const og=div({class:'grid-opts'});
+      comp.opts.forEach(opt=>{
+        const on=sel.includes(opt.id);
+        const dis=!canAdd(comp,opt.id);
+        const oc=div({
+          class:`oc${dis?' dim':''}`,
+          style:{padding:'10px 13px',borderRadius:'9px',border:`1px solid ${on?GOLD:'#1c1c1c'}`,background:on?GOLD_BG:'#0f0f0f',display:'flex',alignItems:'center',gap:'9px'},
+          onclick:()=>{ if(!dis) toggle(comp,opt.id); }
+        },
+          span({style:{fontSize:'16px',lineHeight:'1',flexShrink:'0'}},opt.icon),
+          div({style:{flex:'1',minWidth:'0'}},
+            div({style:{fontSize:'12px',fontWeight:on?'600':'400',color:on?'#e0d4bc':dis?'#3a3a3a':'#828282',lineHeight:'1.3'}},opt.label),
+            opt.hint?span({class:'sans',style:{fontSize:'9px',color:on?'rgba(200,160,96,0.7)':'#383838',marginTop:'1px',display:'block'}},opt.hint):null,
+            opt.extra
+              ? span({class:'sans',style:{fontSize:'10px',color:on?GOLD:'#4a4a4a',marginTop:'2px',display:'block',fontWeight:on?'600':'400'}},`+${fmt(opt.extra)} €`)
+              : span({class:'sans',style:{fontSize:'10px',color:on?'#7a9a5a':'#383838',marginTop:'2px',display:'block'}},'included')
+          ),
+          div({class:'sans',style:{width:'15px',height:'15px',borderRadius:'3px',flexShrink:'0',border:`1px solid ${on?GOLD:'#262626'}`,background:on?GOLD:'transparent',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'8px',color:'#080808',fontWeight:'900'}},on?'✓':'')
+        );
+        og.appendChild(oc);
+      });
+      optWrap.appendChild(og);
+      if(atMax){
+        optWrap.appendChild(div({class:'sans',style:{fontSize:'11px',color:'#6a5230',padding:'7px 2px 0',display:'flex',alignItems:'center',gap:'5px'}},
+          span({},'⚠'),` Limit reached — max. ${comp.max} options for this section.`
+        ));
+      }
+      wrap.appendChild(optWrap);
+    }
+    list.appendChild(wrap);
+  });
+  return div({class:'fi'},
+    p({class:'sans',style:{fontSize:'11px',letterSpacing:'0.16em',color:GOLD,textTransform:'uppercase',marginBottom:'10px'}},'Step 3 · Configure Compartments'),
+    h1({style:{fontSize:'36px',letterSpacing:'0.03em',marginBottom:'8px',lineHeight:'1.1'}},'Customize each section'),
+    p({class:'sans',style:{fontSize:'14px',color:'#4a4a4a',marginBottom:'22px',lineHeight:'1.6'}},'Tap a compartment to expand it. Each section has a realistic slot limit.'),
+    list,
+    div({style:{display:'flex',gap:'12px'}},
+      btn({class:'gh',style:{padding:'13px 22px',borderRadius:'10px',border:'1px solid #1c1c1c',color:'#555',fontSize:'14px'},onclick:()=>{state.step=1;render();}},'← Back'),
+      btn({class:'gb',style:{flex:'1',padding:'13px 22px',borderRadius:'10px',background:'linear-gradient(135deg,#b48c50,#d4a96a)',color:'#080808',fontSize:'15px',fontWeight:'700'},onclick:()=>{state.step=3;render();}},'View Summary →')
+    )
+  );
+}
+
+// ── STEP 3: SUMMARY ──────────────────────────────────────
+function renderSummary() {
+  const comps=getComps();
+  const c=state.color;
+  const tf=totalFeatures();
+  const base=state.size===32?299.90:349.90;
+  const extras=comps.reduce((sum,comp)=>{
+    const s=state.sel[comp.id]||[];
+    return sum+s.reduce((a,id)=>{ const o=comp.opts.find(x=>x.id===id); return a+(o?.extra||0); },0);
+  },0);
+
+  // Color swatch
+  const swStyle={width:'52px',height:'52px',borderRadius:'11px',flexShrink:'0',border:'1.5px solid rgba(255,255,255,0.06)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'24px'};
+  if(!c.camo) Object.assign(swStyle,{background:`linear-gradient(140deg,${c.hex},${c.mid},${c.hi})`});
+
+  // Features list
+  const featList=div({});
+  if(tf===0){
+    featList.appendChild(p({class:'sans',style:{fontSize:'13px',color:'#2e2e2e',fontStyle:'italic'}},'No extras — base configuration.'));
+  } else {
+    comps.forEach(comp=>{
+      const sel=state.sel[comp.id]||[];
+      if(!sel.length) return;
+      const block=div({style:{marginBottom:'14px'}});
+      block.appendChild(div({style:{fontSize:'12px',fontWeight:'600',color:GOLD,marginBottom:'7px',display:'flex',alignItems:'center',gap:'5px'}},comp.icon+' '+comp.label));
+      const chips=div({style:{display:'flex',flexWrap:'wrap',gap:'5px'}});
+      sel.forEach(id=>{
+        const opt=comp.opts.find(o=>o.id===id);
+        if(opt) chips.appendChild(span({class:'sans',style:{fontSize:'11px',padding:'3px 10px',borderRadius:'20px',background:GOLD_BG,border:`1px solid ${GOLD_BORDER}`,color:'#ccc'}},opt.icon+' '+opt.label+(opt.extra?` +${fmt(opt.extra)}€`:'')));
+      });
+      block.appendChild(chips);
+      featList.appendChild(block);
+    });
+  }
+
+  const leftCard=div({style:{borderRadius:'13px',border:'1px solid #181818',overflow:'hidden'}},
+    div({style:{padding:'20px 22px',background:'#0d0d0d',borderBottom:'1px solid #141414',display:'flex',alignItems:'center',gap:'16px'}},
+      div({class:c.camo?'camo':'',style:swStyle},c.camo?'🎒':'🎒'),
+      div({style:{flex:'1',minWidth:'0'}},
+        div({style:{fontSize:'18px',letterSpacing:'0.04em',lineHeight:'1.2'}},`TRAILMATE ${state.size}L`),
+        span({class:'sans',style:{fontSize:'13px',color:'#555',marginTop:'3px',display:'block'}},c.label),
+        div({style:{display:'flex',gap:'5px',marginTop:'8px',flexWrap:'wrap'}},
+          ...['🌧️ IPX6','✈️ Airline-ready','🔒 Anti-Theft','2Y Warranty'].map(t=>
+            span({class:'sans',style:{fontSize:'10px',padding:'2px 8px',borderRadius:'20px',background:'#111',border:'1px solid #1c1c1c',color:'#484848'}},t))
+        )
+      )
+    ),
+    div({style:{padding:'18px 22px',background:'#0a0a0a'}},
+      div({class:'sans',style:{fontSize:'10px',letterSpacing:'0.12em',color:'#333',textTransform:'uppercase',marginBottom:'14px'}},'Selected Features'),
+      featList
+    )
+  );
+
+  const priceRows=div({});
+  // Base row
+  const br=div({style:{display:'flex',justifyContent:'space-between',marginBottom:'6px'}});
+  br.appendChild(span({class:'sans',style:{fontSize:'13px',color:'#555'}},`Base price ${state.size}L`));
+  br.appendChild(span({class:'sans',style:{fontSize:'13px',color:'#888'}},`€ ${fmt(base)}`));
+  priceRows.appendChild(br);
+  if(extras>0){
+    const er=div({style:{display:'flex',justifyContent:'space-between',marginBottom:'6px'}});
+    er.appendChild(span({class:'sans',style:{fontSize:'13px',color:'#555'}},`Add-ons (${tf})`));
+    er.appendChild(span({class:'sans',style:{fontSize:'13px',color:GOLD}},`+ € ${fmt(extras)}`));
+    priceRows.appendChild(er);
+  }
+
+  const rightCard=div({style:{display:'flex',flexDirection:'column',gap:'12px'}},
+    div({style:{padding:'24px',borderRadius:'13px',background:'#0d0d0d',border:'1px solid #181818'}},
+      div({class:'sans',style:{fontSize:'10px',color:'#383838',letterSpacing:'0.12em',textTransform:'uppercase',marginBottom:'14px'}},'Price Breakdown'),
+      priceRows,
+      div({style:{height:'1px',background:'#1c1c1c',margin:'14px 0'}}),
+      div({class:'sans',style:{fontSize:'11px',color:'#444',marginBottom:'6px'}},'Total'),
+      div({style:{fontSize:'40px',color:'#eee',letterSpacing:'0.03em',lineHeight:'1'}},`€ ${calcPrice()}`),
+      p({class:'sans',style:{fontSize:'11px',color:'#333',marginTop:'8px'}},'incl. VAT · free shipping · 2-year warranty')
+    ),
+    btn({class:'gb',style:{width:'100%',padding:'16px 24px',borderRadius:'11px',background:'linear-gradient(135deg,#b48c50,#d4a96a)',color:'#080808',fontSize:'16px',fontWeight:'700'},onclick:()=>alert('Added to cart! 🎒')},'Add to Cart'),
+    btn({class:'gh',style:{padding:'12px 18px',borderRadius:'9px',border:'1px solid #1a1a1a',color:'#484848',fontSize:'13px'},onclick:()=>{state.step=2;render();}},'← Edit Compartments')
+  );
+
+  return div({class:'fi'},
+    p({class:'sans',style:{fontSize:'11px',letterSpacing:'0.16em',color:GOLD,textTransform:'uppercase',marginBottom:'10px'}},'Your Configuration'),
+    h1({style:{fontSize:'36px',letterSpacing:'0.03em',marginBottom:'22px',lineHeight:'1.1'}},`TRAILMATE · ${state.size}L`),
+    div({class:'grid-summary'},leftCard,rightCard)
+  );
+}
+
+// ── MAIN RENDER ───────────────────────────────────────────
+function render() {
+  renderStepBar();
+  const content=document.getElementById('content');
+  content.innerHTML='';
+  const inner=document.createElement('div');
+  inner.id='content-inner';
+  const steps=[renderSize,renderColor,renderCompartments,renderSummary];
+  inner.appendChild(steps[state.step]());
+  content.appendChild(inner);
+}
+
+render();
+</script>
+</body>
+</html>
